@@ -7,6 +7,7 @@
 #include <WifiCreds.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <string.h>
 
 const int sdaWire = 21;
 const int sclWire = 22;
@@ -98,37 +99,43 @@ void onWifiConnect(WiFiEvent_t wifiEvent, WiFiEventInfo_t wifiEventInfo);
 dateTime_t fetchDateTime();
 void updateScreenWithDateTime(dateTime_t);
 
-void setup() {
-  Serial.begin(115200);
+void setup(){
+	Serial.begin(115200);
 
-  if(!Wire.begin(sdaWire, sclWire)) {
-    Serial.println("Failed to initialized I2C wire connection");
-    for(;;);
-  }
+	if (!Wire.begin(sdaWire, sclWire))
+	{
+		Serial.println("Failed to initialized I2C wire connection");
+		for (;;)
+			;
+	}
 
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("Failed to initialized display");
-    for(;;);
-  }
-  
-  drawLogo();
+	if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+	{
+		Serial.println("Failed to initialized display");
+		for (;;)
+			;
+	}
 
-  delay(500);
+	drawLogo();
 
-  display.clearDisplay();
+	delay(500);
 
-  wifiConnect();
+	display.clearDisplay();
 
-  WiFi.onEvent(onWifiConnect, ARDUINO_EVENT_WIFI_STA_CONNECTED);
+	wifiConnect();
 
-  delay(1000);
+	WiFi.onEvent(onWifiConnect, ARDUINO_EVENT_WIFI_STA_CONNECTED);
 
-  Serial.println("Starting http client...");
+	delay(1000);
 
-  if(!client.begin(CLOCKADDR)) {
-	Serial.println("Failed to connect to client!");
-	for(;;);
-  }
+	Serial.println("Starting http client...");
+
+	if (!client.begin(CLOCKADDR))
+	{
+		Serial.println("Failed to connect to client!");
+		for (;;)
+			;
+	}
 }
 
 void loop() {
@@ -137,66 +144,107 @@ void loop() {
 	delay(300);
 }
 
-void onWifiConnect(WiFiEvent_t wifiEvent, WiFiEventInfo_t wifiEventInfo) {
+void onWifiConnect(WiFiEvent_t wifiEvent, WiFiEventInfo_t wifiEventInfo){
 	display.clearDisplay();
-  	Serial.println("Wifi connected!");
-  	display.print(F("Wifi Connected!"));
-  	display.display();
+	Serial.println("Wifi connected!");
+	display.print(F("Wifi Connected!"));
+	display.display();
 }
 
-void wifiConnect() {
-  // Connecting to wokwi network
-  WiFi.begin("Wokwi-GUEST");
-  Serial.println("Connecting to wifi");
+void wifiConnect(){
+	// Connecting to wokwi network
+	WiFi.begin("Wokwi-GUEST");
+	Serial.println("Connecting to wifi");
 
-  display.setTextSize(1,2);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(17, 8);
-  display.print(F("Connecting to Wifi..."));
-  display.display();
+	display.setTextSize(1, 2);
+	display.setTextColor(SSD1306_WHITE);
+	display.setCursor(17, 8);
+	display.print(F("Connecting to Wifi..."));
+	display.display();
 }
 
 void drawLogo(){
-  display.clearDisplay();
-  display.drawBitmap(0, 0, logo, 128, 64, SSD1306_WHITE);
-  display.display();
+	display.clearDisplay();
+	display.drawBitmap(0, 0, logo, 128, 64, SSD1306_WHITE);
+	display.display();
 }
 
 dateTime_t fetchDateTime() {
-  Serial.println("Sending request via client...");
-  int responseCode = client.GET();
 
-  if (responseCode == 200) {
-	Serial.println("Request succesful!");
-	Serial.println("Deserializing JSON...");
-	DeserializationError error = deserializeJson(doc, client.getString());
+	dateTime_t newDateTime;
 
-	if(error) {
-		Serial.println("Failed to deserialize JSON");
-		return {nullptr, nullptr};
-	} 
+	// Serial.println("Sending request via client...");
+	int responseCode = client.GET();
 
-	char *date = doc["date"];
-	char *time = doc["time"];
-	return {date, time};
-  }
+	if (responseCode == 200)
+	{
+		// Serial.println("Request succesful!");
+		// Serial.println("Deserializing JSON...");
+		DeserializationError error = deserializeJson(doc, client.getString());
 
-  return {nullptr, nullptr};
+		if (error)
+		{
+			Serial.println("Failed to deserialize JSON");
+			return {nullptr, nullptr};
+		}
+
+		const char *date = doc["date"];
+		const char *time = doc["time"];
+
+		newDateTime.date = (char *)date;
+		newDateTime.time = (char *)time;
+
+		return newDateTime;
+	}
+
+	return {nullptr, nullptr};
 }
 
 void updateScreenWithDateTime(dateTime_t dateTime) {
-	String newTime, newDate;
-	newTime = newDate = "";
+	char newTime[6], newDate[11];
+	newTime[0] = '\0';
 
-	if (dateTime.date == nullptr) {
-		Serial.println("Unknown date...");
-		newDate = "??/??/????";
-		display.print(newDate);
-	} if(dateTime.time == nullptr) {
-		Serial.println("Unknown time...");
-		newTime = "??:??";
-		display.print(newTime);
+	if (dateTime.date != nullptr && dateTime.time != nullptr) {
+		// Formatar a hora
+		strncpy(newTime, dateTime.time, 5);
+		newTime[6] = '\0';
+
+		// Formatar a data
+		char * temp = strtok(dateTime.date, "-");
+		char * date[3];
+		int c = 0;  
+
+		while (temp != nullptr) {
+			date[c] = temp;
+			temp = strtok(nullptr, "-");
+			c++;	
+		}
+
+		for(int i = 2; i >= 0; i--) {
+			strcat(newDate, date[i]);
+			if(i > 0) strcat(newDate, "/");
+		}
 	}
+	else if (dateTime.date == nullptr)
+	{
+		Serial.println("Unknown date...");
+		strcpy(newDate, "??/??/????");
+	}
+	if (dateTime.time == nullptr)
+	{
+		Serial.println("Unknown time...");
+		strcpy(newTime, "??:??");
+	}
+
+	// Serial.print("Date: ");
+	// Serial.println(newDate);
+	Serial.print("Hora antiga: ");
+	Serial.println(dateTime.time);
+
+	Serial.print("Hora nova: ");
+	Serial.println(newTime);
+
+	
 
 	display.display();
 }
