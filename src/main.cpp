@@ -98,6 +98,7 @@ void drawLogo();
 void onWifiConnect(WiFiEvent_t wifiEvent, WiFiEventInfo_t wifiEventInfo);
 dateTime_t fetchDateTime();
 void updateScreenWithDateTime(dateTime_t);
+void connectClient();
 
 void setup(){
 	Serial.begin(115200);
@@ -127,7 +128,17 @@ void setup(){
 	WiFi.onEvent(onWifiConnect, ARDUINO_EVENT_WIFI_STA_CONNECTED);
 
 	delay(1000);
+	
+	connectClient();
+}
 
+void loop() {
+	dateTime_t dateTime = fetchDateTime();
+	updateScreenWithDateTime(dateTime);
+	delay(300);
+}
+
+void connectClient() {
 	Serial.println("Starting http client...");
 
 	if (!client.begin(CLOCKADDR))
@@ -138,15 +149,12 @@ void setup(){
 	}
 }
 
-void loop() {
-	dateTime_t dateTime = fetchDateTime();
-	updateScreenWithDateTime(dateTime);
-	delay(300);
-}
-
 void onWifiConnect(WiFiEvent_t wifiEvent, WiFiEventInfo_t wifiEventInfo){
 	display.clearDisplay();
 	Serial.println("Wifi connected!");
+	display.setTextSize(1, 2);
+	display.setTextColor(SSD1306_WHITE);
+	display.setCursor(20, 25);
 	display.print(F("Wifi Connected!"));
 	display.display();
 }
@@ -155,10 +163,9 @@ void wifiConnect(){
 	// Connecting to wokwi network
 	WiFi.begin("Wokwi-GUEST");
 	Serial.println("Connecting to wifi");
-
 	display.setTextSize(1, 2);
 	display.setTextColor(SSD1306_WHITE);
-	display.setCursor(17, 8);
+	display.setCursor(2, 25);
 	display.print(F("Connecting to Wifi..."));
 	display.display();
 }
@@ -169,17 +176,17 @@ void drawLogo(){
 	display.display();
 }
 
-dateTime_t fetchDateTime() {
+dateTime_t fetchDateTime() PROGMEM {
 
 	dateTime_t newDateTime;
 
-	// Serial.println("Sending request via client...");
+	Serial.println("Sending request via client...");
 	int responseCode = client.GET();
 
 	if (responseCode == 200)
 	{
-		// Serial.println("Request succesful!");
-		// Serial.println("Deserializing JSON...");
+		Serial.println("Request succesful!");
+		Serial.println("Deserializing JSON...");
 		DeserializationError error = deserializeJson(doc, client.getString());
 
 		if (error)
@@ -200,23 +207,26 @@ dateTime_t fetchDateTime() {
 	return {nullptr, nullptr};
 }
 
-void updateScreenWithDateTime(dateTime_t dateTime) {
+void updateScreenWithDateTime(dateTime_t dateTime) PROGMEM {
+	display.clearDisplay();
+
 	char newTime[6], newDate[11];
 	newTime[0] = '\0';
+	newDate[0] = '\0';
 
 	if (dateTime.date != nullptr && dateTime.time != nullptr) {
 		// Formatar a hora
 		strncpy(newTime, dateTime.time, 5);
-		newTime[6] = '\0';
+		newTime[5] = '\0';
 
 		// Formatar a data
-		char * temp = strtok(dateTime.date, "-");
-		char * date[3];
-		int c = 0;  
+		char *tokenPointer = strtok(dateTime.date, "-");
+		char *date[3];
+		int c = 0, i = 2;  
 
-		while (temp != nullptr) {
-			date[c] = temp;
-			temp = strtok(nullptr, "-");
+		while (tokenPointer != nullptr) {
+			date[c] = tokenPointer;
+			tokenPointer = strtok(nullptr, "-");
 			c++;	
 		}
 
@@ -225,26 +235,31 @@ void updateScreenWithDateTime(dateTime_t dateTime) {
 			if(i > 0) strcat(newDate, "/");
 		}
 	}
-	else if (dateTime.date == nullptr)
-	{
-		Serial.println("Unknown date...");
-		strcpy(newDate, "??/??/????");
-	}
-	if (dateTime.time == nullptr)
-	{
-		Serial.println("Unknown time...");
-		strcpy(newTime, "??:??");
+	else {
+		if (dateTime.date == nullptr) {
+			Serial.println("Unknown date...");
+			strcpy(newDate, "??/??/????");
+		} if (dateTime.time == nullptr) {
+			Serial.println("Unknown time...");
+			strcpy(newTime, "??:??");
+		}
 	}
 
-	// Serial.print("Date: ");
-	// Serial.println(newDate);
-	Serial.print("Hora antiga: ");
-	Serial.println(dateTime.time);
+	Serial.print("Date: ");
+	Serial.println(newDate);
 
-	Serial.print("Hora nova: ");
+	Serial.print("Hour: ");
 	Serial.println(newTime);
 
-	
+	display.setCursor(50, 15);
+	display.setTextSize(1,2);
+	display.setTextColor(SSD1306_WHITE);
+	display.print(newTime);
+
+	display.setCursor(35, 35);
+	display.setTextSize(1,2);
+	display.setTextColor(SSD1306_WHITE);
+	display.print(newDate);
 
 	display.display();
 }
