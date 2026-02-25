@@ -15,8 +15,6 @@ const int sclWire = 22;
 const int displayWidth = 128;
 const int displayHeight = 64;
 
-const int yOffset = 15;
-
 JsonDocument doc;
 
 typedef struct {
