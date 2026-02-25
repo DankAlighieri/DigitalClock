@@ -165,8 +165,8 @@ void wifiConnect(){
 	Serial.println("Connecting to wifi");
 	display.setTextSize(1, 2);
 	display.setTextColor(SSD1306_WHITE);
-	display.setCursor(2, 25);
-	display.print(F("Connecting to Wifi..."));
+	display.setCursor(4, 25);
+	display.print(F("Connecting to Wifi"));
 	display.display();
 }
 
