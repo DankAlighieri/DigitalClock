@@ -4,7 +4,6 @@
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
-#include <WifiCreds.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <string.h>
@@ -89,7 +88,8 @@ const uint8_t logo[] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 Adafruit_SSD1306 display(displayWidth, displayHeight, &Wire, -1);
-HTTPClient client;
+HTTPClient connection;
+WiFiClientSecure client;
 
 void wifiConnect();
 void drawLogo();
@@ -126,6 +126,8 @@ void setup(){
 	WiFi.onEvent(onWifiConnect, ARDUINO_EVENT_WIFI_STA_CONNECTED);
 
 	delay(1000);
+
+	client.setInsecure();
 	
 	connectClient();
 }
@@ -133,13 +135,13 @@ void setup(){
 void loop() {
 	dateTime_t dateTime = fetchDateTime();
 	updateScreenWithDateTime(dateTime);
-	delay(300);
+	delay(900);
 }
 
 void connectClient() {
 	Serial.println("Starting http client...");
 
-	if (!client.begin(CLOCKADDR))
+	if (!connection.begin(client, "https://timeapi.io/api/time/current/zone?timeZone=America/Recife"))
 	{
 		Serial.println("Failed to connect to client!");
 		for (;;)
@@ -166,6 +168,24 @@ void wifiConnect(){
 	display.setCursor(4, 25);
 	display.print(F("Connecting to Wifi"));
 	display.display();
+
+	while (WiFi.status() != WL_CONNECTED) {
+  		delay(500);
+  		Serial.print(".");
+	}
+
+	
+	Serial.println();
+	Serial.print("IP: "); Serial.println(WiFi.localIP());
+	Serial.print("DNS: "); Serial.println(WiFi.dnsIP());
+
+	IPAddress resolved;
+	if (!WiFi.hostByName("timeapi.io", resolved)) {
+	  Serial.println("Falha DNS para timeapi.io");
+	} else {
+	  Serial.print("timeapi.io -> "); Serial.println(resolved);
+	}
+
 }
 
 void drawLogo(){
@@ -174,18 +194,20 @@ void drawLogo(){
 	display.display();
 }
 
-dateTime_t fetchDateTime() PROGMEM {
+dateTime_t fetchDateTime() {
 
 	dateTime_t newDateTime;
 
 	Serial.println("Sending request via client...");
-	int responseCode = client.GET();
 
-	if (responseCode == 200)
+	
+	int responseCode = connection.GET();
+
+	if (responseCode == HTTP_CODE_OK)
 	{
 		Serial.println("Request succesful!");
 		Serial.println("Deserializing JSON...");
-		DeserializationError error = deserializeJson(doc, client.getString());
+		DeserializationError error = deserializeJson(doc, connection.getString());
 
 		if (error)
 		{
@@ -199,65 +221,35 @@ dateTime_t fetchDateTime() PROGMEM {
 		newDateTime.date = (char *)date;
 		newDateTime.time = (char *)time;
 
-		return newDateTime;
+		Serial.println(newDateTime.date);
+		Serial.println(newDateTime.time);
+		return newDateTime;	
+	} else {
+		Serial.print("Erro ");
+		Serial.println(responseCode);
 	}
 
 	return {nullptr, nullptr};
 }
 
-void updateScreenWithDateTime(dateTime_t dateTime) PROGMEM {
+void updateScreenWithDateTime(dateTime_t dateTime) {
 	display.clearDisplay();
 
-	char newTime[6], newDate[11];
-	newTime[0] = '\0';
-	newDate[0] = '\0';
-
-	if (dateTime.date != nullptr && dateTime.time != nullptr) {
-		// Formatar a hora
-		strncpy(newTime, dateTime.time, 5);
-		newTime[5] = '\0';
-
-		// Formatar a data
-		char *tokenPointer = strtok(dateTime.date, "-");
-		char *date[3];
-		int c = 0, i = 2;  
-
-		while (tokenPointer != nullptr) {
-			date[c] = tokenPointer;
-			tokenPointer = strtok(nullptr, "-");
-			c++;	
-		}
-
-		for(int i = 2; i >= 0; i--) {
-			strcat(newDate, date[i]);
-			if(i > 0) strcat(newDate, "/");
-		}
-	}
-	else {
-		if (dateTime.date == nullptr) {
-			Serial.println("Unknown date...");
-			strcpy(newDate, "??/??/????");
-		} if (dateTime.time == nullptr) {
-			Serial.println("Unknown time...");
-			strcpy(newTime, "??:??");
-		}
-	}
-
 	Serial.print("Date: ");
-	Serial.println(newDate);
+	Serial.println(dateTime.date);
 
 	Serial.print("Hour: ");
-	Serial.println(newTime);
+	Serial.println(dateTime.time);
 
 	display.setCursor(50, 15);
 	display.setTextSize(1,2);
 	display.setTextColor(SSD1306_WHITE);
-	display.print(newTime);
+	display.print(dateTime.time);
 
 	display.setCursor(35, 35);
 	display.setTextSize(1,2);
 	display.setTextColor(SSD1306_WHITE);
-	display.print(newDate);
+	display.print(dateTime.date);
 
 	display.display();
 }
